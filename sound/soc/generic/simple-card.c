@@ -297,12 +297,10 @@ static int asoc_simple_card_dai_link_of_dpcm(struct simple_card_data *priv,
 
 	asoc_simple_card_get_conversion(dev, np, &dai_props->adata);
 
+	asoc_simple_card_canonicalize_platform(dai_link);
+
 	ret = asoc_simple_card_of_parse_tdm(np, dai);
 	if (ret)
-		return ret;
-
-	ret = asoc_simple_card_canonicalize_dailink(dai_link);
-	if (ret < 0)
 		return ret;
 
 	snprintf(prop, sizeof(prop), "%smclk-fs", prefix);
@@ -409,10 +407,6 @@ static int asoc_simple_card_dai_link_of(struct simple_card_data *priv,
 	if (ret < 0)
 		goto dai_link_of_err;
 
-	ret = asoc_simple_card_canonicalize_dailink(dai_link);
-	if (ret < 0)
-		goto dai_link_of_err;
-
 	ret = asoc_simple_card_set_dailink_name(dev, dai_link,
 						"%s-%s",
 						dai_link->cpu_dai_name,
@@ -424,6 +418,7 @@ static int asoc_simple_card_dai_link_of(struct simple_card_data *priv,
 	dai_link->init = asoc_simple_card_dai_init;
 
 	asoc_simple_card_canonicalize_cpu(dai_link, single_cpu);
+	asoc_simple_card_canonicalize_platform(dai_link);
 
 dai_link_of_err:
 	of_node_put(node);
