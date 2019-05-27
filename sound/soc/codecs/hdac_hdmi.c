@@ -169,11 +169,6 @@ static void hdac_hdmi_jack_report(struct hdac_hdmi_pcm *pcm,
 		snd_soc_dapm_disable_pin(port->dapm, port->jack_pin);
 
 	if (is_connect) {
-		/*
-		 * Report Jack connect event when a device is connected
-		 * for the first time where same PCM is attached to multiple
-		 * ports.
-		 */
 		if (pcm->jack_event == 0) {
 			dev_dbg(&hdev->dev,
 					"jack report for pcm=%d\n",
@@ -181,17 +176,11 @@ static void hdac_hdmi_jack_report(struct hdac_hdmi_pcm *pcm,
 			snd_soc_jack_report(pcm->jack, SND_JACK_AVOUT,
 						SND_JACK_AVOUT);
 		}
-		pcm->jack_event++;
+		pcm->jack_event = 1;
 	} else {
-		/*
-		 * Report Jack disconnect event when a device is disconnected
-		 * is the only last connected device when same PCM is attached
-		 * to multiple ports.
-		 */
 		if (pcm->jack_event == 1)
 			snd_soc_jack_report(pcm->jack, 0, SND_JACK_AVOUT);
-		if (pcm->jack_event > 0)
-			pcm->jack_event--;
+		pcm->jack_event = 0;
 	}
 
 	snd_soc_dapm_sync(port->dapm);
