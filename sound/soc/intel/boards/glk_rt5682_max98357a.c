@@ -28,7 +28,6 @@
 #define MAXIM_DEV0_NAME "MX98357A:00"
 #define DUAL_CHANNEL 2
 #define QUAD_CHANNEL 4
-#define NAME_SIZE 32
 
 static struct snd_soc_jack geminilake_hdmi[3];
 
@@ -540,21 +539,12 @@ static int glk_card_late_probe(struct snd_soc_card *card)
 {
 	struct glk_card_private *ctx = snd_soc_card_get_drvdata(card);
 	struct snd_soc_component *component = NULL;
-	char jack_name[NAME_SIZE];
 	struct glk_hdmi_pcm *pcm;
 	int err = 0;
 	int i = 0;
 
 	list_for_each_entry(pcm, &ctx->hdmi_pcm_list, head) {
 		component = pcm->codec_dai->component;
-		snprintf(jack_name, sizeof(jack_name),
-			"HDMI/DP, pcm=%d Jack", pcm->device);
-		err = snd_soc_card_jack_new(card, jack_name,
-					SND_JACK_AVOUT, &geminilake_hdmi[i],
-					NULL, 0);
-
-		if (err)
-			return err;
 
 		err = hdac_hdmi_jack_init(pcm->codec_dai, pcm->device,
 						&geminilake_hdmi[i]);

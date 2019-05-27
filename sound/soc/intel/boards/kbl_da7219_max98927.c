@@ -33,7 +33,6 @@
 
 #define DUAL_CHANNEL	2
 #define QUAD_CHANNEL	4
-#define NAME_SIZE	32
 
 static struct snd_soc_card *kabylake_audio_card;
 static struct snd_soc_jack kabylake_hdmi[3];
@@ -972,18 +971,9 @@ static int kabylake_card_late_probe(struct snd_soc_card *card)
 	struct snd_soc_dapm_context *dapm = &card->dapm;
 	struct snd_soc_component *component = NULL;
 	int err, i = 0;
-	char jack_name[NAME_SIZE];
 
 	list_for_each_entry(pcm, &ctx->hdmi_pcm_list, head) {
 		component = pcm->codec_dai->component;
-		snprintf(jack_name, sizeof(jack_name),
-			"HDMI/DP, pcm=%d Jack", pcm->device);
-		err = snd_soc_card_jack_new(card, jack_name,
-					SND_JACK_AVOUT, &kabylake_hdmi[i],
-					NULL, 0);
-
-		if (err)
-			return err;
 
 		err = hdac_hdmi_jack_init(pcm->codec_dai, pcm->device,
 						&kabylake_hdmi[i]);

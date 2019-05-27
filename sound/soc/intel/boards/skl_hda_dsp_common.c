@@ -133,24 +133,10 @@ int skl_hda_hdmi_jack_init(struct snd_soc_card *card)
 	struct skl_hda_private *ctx = snd_soc_card_get_drvdata(card);
 	struct snd_soc_component *component = NULL;
 	struct skl_hda_hdmi_pcm *pcm;
-	char jack_name[NAME_SIZE];
 	int err;
 
 	list_for_each_entry(pcm, &ctx->hdmi_pcm_list, head) {
 		component = pcm->codec_dai->component;
-		snprintf(jack_name, sizeof(jack_name),
-			 "HDMI/DP, pcm=%d Jack", pcm->device);
-		err = snd_soc_card_jack_new(card, jack_name,
-					    SND_JACK_AVOUT, &pcm->hdmi_jack,
-					    NULL, 0);
-
-		if (err)
-			return err;
-
-		err = snd_jack_add_new_kctl(pcm->hdmi_jack.jack,
-					    jack_name, SND_JACK_AVOUT);
-		if (err)
-			dev_warn(component->dev, "failed creating Jack kctl\n");
 
 		err = hdac_hdmi_jack_init(pcm->codec_dai, pcm->device,
 					  &pcm->hdmi_jack);

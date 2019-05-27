@@ -592,14 +592,12 @@ static struct snd_soc_dai_link broxton_dais[] = {
 	},
 };
 
-#define NAME_SIZE	32
 static int bxt_card_late_probe(struct snd_soc_card *card)
 {
 	struct bxt_card_private *ctx = snd_soc_card_get_drvdata(card);
 	struct bxt_hdmi_pcm *pcm;
 	struct snd_soc_component *component = NULL;
 	int err, i = 0;
-	char jack_name[NAME_SIZE];
 
 	if (soc_intel_is_glk())
 		snd_soc_dapm_add_routes(&card->dapm, gemini_map,
@@ -610,14 +608,6 @@ static int bxt_card_late_probe(struct snd_soc_card *card)
 
 	list_for_each_entry(pcm, &ctx->hdmi_pcm_list, head) {
 		component = pcm->codec_dai->component;
-		snprintf(jack_name, sizeof(jack_name),
-			"HDMI/DP, pcm=%d Jack", pcm->device);
-		err = snd_soc_card_jack_new(card, jack_name,
-					SND_JACK_AVOUT, &broxton_hdmi[i],
-					NULL, 0);
-
-		if (err)
-			return err;
 
 		err = hdac_hdmi_jack_init(pcm->codec_dai, pcm->device,
 						&broxton_hdmi[i]);

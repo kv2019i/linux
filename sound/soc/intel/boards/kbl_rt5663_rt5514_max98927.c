@@ -32,7 +32,6 @@
 #define RT5663_DEV_NAME "i2c-10EC5663:00"
 #define RT5514_AIF1_BCLK_FREQ (48000 * 8 * 16)
 #define RT5514_AIF1_SYSCLK_FREQ 12288000
-#define NAME_SIZE 32
 
 #define DMIC_CH(p) p->list[p->count-1]
 
@@ -594,18 +593,10 @@ static int kabylake_card_late_probe(struct snd_soc_card *card)
 	struct kbl_hdmi_pcm *pcm;
 	struct snd_soc_component *component = NULL;
 	int err, i = 0;
-	char jack_name[NAME_SIZE];
 
 	list_for_each_entry(pcm, &ctx->hdmi_pcm_list, head) {
 		component = pcm->codec_dai->component;
-		snprintf(jack_name, sizeof(jack_name),
-			"HDMI/DP,pcm=%d Jack", pcm->device);
-		err = snd_soc_card_jack_new(card, jack_name,
-				SND_JACK_AVOUT, &ctx->kabylake_hdmi[i],
-				NULL, 0);
 
-		if (err)
-			return err;
 		err = hdac_hdmi_jack_init(pcm->codec_dai, pcm->device,
 						&ctx->kabylake_hdmi[i]);
 		if (err < 0)

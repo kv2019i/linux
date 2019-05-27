@@ -22,8 +22,6 @@
 #include "../../codecs/hdac_hdmi.h"
 #include "../common/soc-intel-quirks.h"
 
-#define NAME_SIZE 32
-
 #define SOF_RT5682_SSP_CODEC(quirk)		((quirk) & GENMASK(2, 0))
 #define SOF_RT5682_SSP_CODEC_MASK			(GENMASK(2, 0))
 #define SOF_RT5682_MCLK_EN			BIT(3)
@@ -266,7 +264,6 @@ static int sof_card_late_probe(struct snd_soc_card *card)
 {
 	struct sof_card_private *ctx = snd_soc_card_get_drvdata(card);
 	struct snd_soc_component *component = NULL;
-	char jack_name[NAME_SIZE];
 	struct sof_hdmi_pcm *pcm;
 	int err = 0;
 	int i = 0;
@@ -277,14 +274,6 @@ static int sof_card_late_probe(struct snd_soc_card *card)
 
 	list_for_each_entry(pcm, &ctx->hdmi_pcm_list, head) {
 		component = pcm->codec_dai->component;
-		snprintf(jack_name, sizeof(jack_name),
-			 "HDMI/DP, pcm=%d Jack", pcm->device);
-		err = snd_soc_card_jack_new(card, jack_name,
-					    SND_JACK_AVOUT, &sof_hdmi[i],
-					    NULL, 0);
-
-		if (err)
-			return err;
 
 		err = hdac_hdmi_jack_init(pcm->codec_dai, pcm->device,
 					  &sof_hdmi[i]);
