@@ -462,8 +462,8 @@ static int hdac_hdmi_query_port_connlist(struct hdac_device *hdev,
 {
 	if (!(get_wcaps(hdev, pin->nid) & AC_WCAP_CONN_LIST)) {
 		dev_warn(&hdev->dev,
-			"HDMI: pin %d wcaps %#x does not support connection list\n",
-			pin->nid, get_wcaps(hdev, pin->nid));
+			 "HDMI: pin %d wcaps %#x does not support connection list\n",
+			 pin->nid, get_wcaps(hdev, pin->nid));
 		return -EINVAL;
 	}
 
@@ -474,11 +474,11 @@ static int hdac_hdmi_query_port_connlist(struct hdac_device *hdev,
 			port->mux_nids, HDA_MAX_CONNECTIONS);
 	if (port->num_mux_nids == 0)
 		dev_warn(&hdev->dev,
-			"No connections found for pin:port %d:%d\n",
-						pin->nid, port->id);
+			 "No connections found for pin:port %d:%d\n",
+			 pin->nid, port->id);
 
 	dev_dbg(&hdev->dev, "num_mux_nids %d for pin:port %d:%d\n",
-			port->num_mux_nids, pin->nid, port->id);
+		port->num_mux_nids, pin->nid, port->id);
 
 	return port->num_mux_nids;
 }
@@ -580,9 +580,9 @@ static int hdac_hdmi_pcm_open(struct snd_pcm_substream *substream,
 			(!port->eld.eld_valid)) {
 
 		dev_warn(&hdev->dev,
-			"Failed: present?:%d ELD valid?:%d pin:port: %d:%d\n",
-			port->eld.monitor_present, port->eld.eld_valid,
-			port->pin->nid, port->id);
+			 "Failed: present?:%d ELD valid?:%d pin:port: %d:%d\n",
+			 port->eld.monitor_present, port->eld.eld_valid,
+			 port->pin->nid, port->id);
 
 		return 0;
 	}
@@ -742,7 +742,7 @@ static int hdac_hdmi_pin_output_widget_event(struct snd_soc_dapm_widget *w,
 	struct hdac_hdmi_pcm *pcm;
 
 	dev_dbg(&hdev->dev, "%s: widget: %s event: %x\n",
-			__func__, w->name, event);
+		__func__, w->name, event);
 
 	pcm = hdac_hdmi_get_pcm(hdev, port);
 	if (!pcm)
@@ -788,7 +788,7 @@ static int hdac_hdmi_cvt_output_widget_event(struct snd_soc_dapm_widget *w,
 	struct hdac_hdmi_pcm *pcm;
 
 	dev_dbg(&hdev->dev, "%s: widget: %s event: %x\n",
-			__func__, w->name, event);
+		__func__, w->name, event);
 
 	pcm = hdac_hdmi_get_pcm_from_cvt(hdmi, cvt);
 	if (!pcm)
@@ -842,7 +842,7 @@ static int hdac_hdmi_pin_mux_widget_event(struct snd_soc_dapm_widget *w,
 	int mux_idx;
 
 	dev_dbg(&hdev->dev, "%s: widget: %s event: %x\n",
-			__func__, w->name, event);
+		__func__, w->name, event);
 
 	if (!kc)
 		kc  = w->kcontrols[0];
@@ -1158,7 +1158,7 @@ static int hdac_hdmi_init_dai_map(struct hdac_device *hdev)
 
 		if (dai_id == HDA_MAX_CVTS) {
 			dev_warn(&hdev->dev,
-				"Max dais supported: %d\n", dai_id);
+				 "Max dais supported: %d\n", dai_id);
 			break;
 		}
 	}
@@ -1308,6 +1308,7 @@ static int hdac_hdmi_add_ports(struct hdac_device *hdev,
 	}
 	pin->ports = ports;
 	pin->num_ports = max_ports;
+
 	return 0;
 }
 
@@ -1571,7 +1572,7 @@ static void hdac_hdmi_eld_notify_cb(void *aptr, int port, int pipe)
 	}
 
 	dev_dbg(&hdev->dev, "%s: for pin:%d port=%d\n", __func__,
-							pin_nid, pipe);
+		pin_nid, pipe);
 
 	/*
 	 * skip notification during system suspend (but not in runtime PM);
