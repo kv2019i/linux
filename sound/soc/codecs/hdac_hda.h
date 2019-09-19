@@ -24,6 +24,7 @@ struct hdac_hda_pcm {
 struct hdac_hda_priv {
 	struct hda_codec codec;
 	struct hdac_hda_pcm pcm[HDAC_LAST_DAI_ID];
+	bool need_display_power;
 };
 
 #define hdac_to_hda_priv(_hdac) \

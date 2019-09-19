@@ -14,6 +14,7 @@
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
 #include <sound/hdaudio_ext.h>
+#include <sound/hda_i915.h>
 #include <sound/hda_codec.h>
 #include <sound/hda_register.h>
 
@@ -390,6 +391,14 @@ static int hdac_hda_codec_probe(struct snd_soc_component *component)
 	}
 
 	snd_hdac_ext_bus_link_get(hdev->bus, hlink);
+
+	/*
+	 * Ensure any HDA display is powered at codec probe.
+	 * After snd_hda_codec_device_new(), display power is
+	 * managed by runtime PM.
+	 */
+        if (hda_pvt->need_display_power)
+		snd_hdac_display_power(hdev->bus, HDA_CODEC_IDX_CONTROLLER, true);
 
 	ret = snd_hda_codec_device_new(hcodec->bus, component->card->snd_card,
 				       hdev->addr, hcodec);
