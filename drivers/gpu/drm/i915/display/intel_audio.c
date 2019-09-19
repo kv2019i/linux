@@ -852,6 +852,12 @@ static unsigned long i915_audio_component_get_power(struct device *kdev)
 
 	ret = intel_display_power_get(dev_priv, POWER_DOMAIN_AUDIO);
 
+	if (IS_TIGERLAKE(dev_priv) || IS_ICELAKE(dev_priv)) {
+		I915_WRITE(AUD_FREQ_CNTRL, dev_priv->audio_freq_cntrl);
+		DRM_DEBUG_KMS("set AUD_FREQ_CNTRL to %08x at get_power",
+			      dev_priv->audio_freq_cntrl);
+	}
+
 	/* Force CDCLK to 2*BCLK as long as we need audio to be powered. */
 	if (dev_priv->audio_power_refcount++ == 0)
 		if (IS_CANNONLAKE(dev_priv) || IS_GEMINILAKE(dev_priv))
@@ -1114,6 +1120,12 @@ static void i915_audio_component_init(struct drm_i915_private *dev_priv)
 		DRM_ERROR("failed to add audio component (%d)\n", ret);
 		/* continue with reduced functionality */
 		return;
+	}
+
+	if (IS_TIGERLAKE(dev_priv) || IS_ICELAKE(dev_priv)) {
+		dev_priv->audio_freq_cntrl = I915_READ(AUD_FREQ_CNTRL);
+		DRM_DEBUG_KMS("init value of AUD_FREQ_CNTRL of %08x",
+			      dev_priv->audio_freq_cntrl);
 	}
 
 	dev_priv->audio_component_registered = true;
