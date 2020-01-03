@@ -1815,9 +1815,16 @@ static int hdmi_parse_codec(struct hda_codec *codec)
 {
 	hda_nid_t nid;
 	int i, nodes;
+	int retry_count = 0;
 
+again:
 	nodes = snd_hda_get_sub_nodes(codec, codec->core.afg, &nid);
 	if (!nid || nodes < 0) {
+		if (retry_count++ < 3) {
+			codec_warn(codec, "HDMI: retrying get sub nodes\n");
+			usleep_range(1000, 2000);
+			goto again;
+		}
 		codec_warn(codec, "HDMI: failed to get afg sub nodes\n");
 		return -EINVAL;
 	}
