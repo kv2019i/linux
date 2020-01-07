@@ -476,7 +476,8 @@ static int hda_init_caps(struct snd_sof_dev *sdev)
 	/* create codec instances */
 	hda_codec_probe_bus(sdev);
 
-	hda_codec_i915_put(sdev);
+	if (!HDA_IDISP_CODEC(bus->codec_mask))
+		hda_codec_i915_put(sdev);
 
 	/*
 	 * we are done probing so decrement link counts
