@@ -189,6 +189,7 @@ int hda_dsp_ctrl_init_chip(struct snd_sof_dev *sdev, bool full_reset)
 #endif
 	struct hdac_stream *stream;
 	int sd_offset, ret = 0;
+	u32 val;
 
 	if (bus->chip_init)
 		return 0;
@@ -236,6 +237,13 @@ int hda_dsp_ctrl_init_chip(struct snd_sof_dev *sdev, bool full_reset)
 		dev_dbg(bus->dev, "filtered codec_mask = 0x%lx\n",
 			bus->codec_mask);
 	}
+
+	val = readl(bus->mlcap + AZX_ML_BASE + (AZX_ML_INTERVAL*0) + AZX_REG_ML_LCTL);
+	dev_info(bus->dev, "LCTL0 %08x, SCF %04x (ext HDA)\n", val, val & 0xf);
+	val = readl(bus->mlcap + AZX_ML_BASE + (AZX_ML_INTERVAL*1) + AZX_REG_ML_LCTL);
+	dev_info(bus->dev, "LCTL1 %08x, SCF %04x (iDisp)\n", val, val & 0xf);
+	val = snd_hdac_chip_readl(bus, VS_EM1);
+	dev_info(bus->dev, "EM1 %08x, ETMODE %02x\n", val, (val >> 27) & 3);
 #endif
 
 	/* clear stream status */
