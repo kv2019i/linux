@@ -1853,18 +1853,31 @@ static int set_stream(struct snd_pcm_substream *substream,
 	int ret = 0;
 	int i;
 
-	/* Set stream pointer on all DAIs */
-	for_each_rtd_dais(rtd, i, dai) {
+	/* Set stream pointer on all CPU DAIs */
+	for (i = 0; i < rtd->num_cpus; i++) {
+		dai = rtd->cpu_dais[i];
 		ret = snd_soc_dai_set_sdw_stream(dai, sdw_stream,
 						 substream->stream);
 		if (ret < 0) {
-			dev_err(rtd->dev,
-				"failed to set stream pointer on dai %s",
+			dev_err(rtd->dev, "failed to set stream pointer on cpu dai %s",
 				dai->name);
-			break;
+			goto err_stream;
 		}
 	}
 
+	/* Set stream pointer on all CODEC DAIs */
+	for (i = 0; i < rtd->num_codecs; i++) {
+		dai = rtd->codec_dais[i];
+		ret = snd_soc_dai_set_sdw_stream(dai, sdw_stream,
+						 substream->stream);
+		if (ret < 0) {
+			dev_err(dai->dev, "failed to set stream pointer on codec dai %s",
+				dai->name);
+			goto err_stream;
+		}
+	}
+
+err_stream:
 	return ret;
 }
 
