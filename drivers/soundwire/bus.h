@@ -7,6 +7,9 @@
 #define DEFAULT_BANK_SWITCH_TIMEOUT 3000
 #define DEFAULT_PROBE_TIMEOUT       2000
 
+/* Placeholder macro to backport soundwire code from 5.7 kernel */
+#define asoc_rtd_to_cpu(rtd, y)        rtd->cpu_dai
+
 #if IS_ENABLED(CONFIG_ACPI)
 int sdw_acpi_find_slaves(struct sdw_bus *bus);
 #else
