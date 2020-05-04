@@ -1854,15 +1854,13 @@ static int set_stream(struct snd_pcm_substream *substream,
 	int i;
 
 	/* Set stream pointer on all CPU DAIs */
-	for (i = 0; i < rtd->num_cpus; i++) {
-		dai = rtd->cpu_dais[i];
-		ret = snd_soc_dai_set_sdw_stream(dai, sdw_stream,
-						 substream->stream);
-		if (ret < 0) {
-			dev_err(rtd->dev, "failed to set stream pointer on cpu dai %s",
-				dai->name);
-			goto err_stream;
-		}
+	dai = rtd->cpu_dai;
+	ret = snd_soc_dai_set_sdw_stream(dai, sdw_stream,
+					substream->stream);
+	if (ret < 0) {
+		dev_err(rtd->dev, "failed to set stream pointer on cpu dai %s",
+			dai->name);
+		goto err_stream;
 	}
 
 	/* Set stream pointer on all CODEC DAIs */
