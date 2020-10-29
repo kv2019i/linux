@@ -168,6 +168,306 @@ static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swi
 	return ret;
 }
 
+static struct snd_sof_route *sof_get_route(struct snd_sof_dev *sdev,
+					   struct snd_sof_widget *src_widget,
+					   struct snd_sof_widget *sink_widget)
+{
+	struct snd_sof_route *sroute;
+
+	list_for_each_entry(sroute, &sdev->route_list, list)
+		if (sroute->src_widget == src_widget && sroute->sink_widget == sink_widget)
+			return sroute;
+
+	return NULL;
+}
+
+static int sof_route_setup(struct snd_sof_dev *sdev, struct snd_soc_dapm_widget *wsource,
+			   struct snd_soc_dapm_widget *wsink)
+{
+	struct snd_sof_widget *src_widget = wsource->dobj.private;
+	struct snd_sof_widget *sink_widget = wsink->dobj.private;
+	struct sof_ipc_pipe_comp_connect *connect;
+	struct snd_sof_route *sroute;
+	struct sof_ipc_reply reply;
+	int ret;
+
+	sroute = sof_get_route(sdev, src_widget, sink_widget);
+	if (!sroute) {
+		dev_err(sdev->dev, "error: cannot find SOF route for source %s -> %s sink\n",
+			wsource->name, wsink->name);
+		return -EINVAL;
+	}
+
+	/* nothing to do if route is already set up */
+	if (sroute->setup)
+		return 0;
+
+	connect = sroute->private;
+
+	/* send ipc */
+	ret = sof_ipc_tx_message(sdev->ipc, connect->hdr.cmd, connect, sizeof(*connect),
+				 &reply, sizeof(reply));
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to load route source %s -> %s sink\n",
+			wsource->name, wsink->name);
+	} else {
+		dev_dbg(sdev->dev, "route %s -> %s setup complete\n", wsource->name, wsink->name);
+		sroute->setup = true;
+	}
+
+	return ret;
+}
+
+static bool is_sof_widget(struct snd_soc_dapm_widget *widget)
+{
+	switch (widget->id) {
+	case snd_soc_dapm_dai_in:
+	case snd_soc_dapm_dai_out:
+	case snd_soc_dapm_mixer:
+	case snd_soc_dapm_pga:
+	case snd_soc_dapm_buffer:
+	case snd_soc_dapm_scheduler:
+	case snd_soc_dapm_aif_out:
+	case snd_soc_dapm_aif_in:
+	case snd_soc_dapm_src:
+	case snd_soc_dapm_asrc:
+	case snd_soc_dapm_siggen:
+	case snd_soc_dapm_effect:
+	case snd_soc_dapm_mux:
+	case snd_soc_dapm_demux:
+		if (widget->dobj.private)
+			return true;
+
+		return false;
+	default:
+		return false;
+	}
+}
+
+static int sof_setup_pipeline_connections(struct snd_sof_dev *sdev,
+					  struct snd_soc_dapm_widget_list *list, int dir)
+{
+	struct snd_soc_dapm_widget *widget;
+	struct snd_soc_dapm_path *p;
+	int ret;
+	int i;
+
+	/*
+	 * Set up connections between widgets in the sink/source paths based on direction.
+	 * Some non-SOF widgets exist in topology either for compatibility or for the
+	 * purpose of connecting a pipeline from a host to a DAI in order to receive the DAPM
+	 * events. But they are not handled by the firmware. So ignore them.
+	 */
+	if (dir == SNDRV_PCM_STREAM_PLAYBACK) {
+		for_each_dapm_widgets(list, i, widget) {
+			if (!is_sof_widget(widget))
+				continue;
+
+			snd_soc_dapm_widget_for_each_sink_path(widget, p)
+				if (is_sof_widget(p->sink)) {
+					ret = sof_route_setup(sdev, widget, p->sink);
+					if (ret < 0)
+						return ret;
+				}
+		}
+	} else {
+		for_each_dapm_widgets(list, i, widget) {
+			if (!is_sof_widget(widget))
+				continue;
+
+			snd_soc_dapm_widget_for_each_source_path(widget, p)
+				if (is_sof_widget(p->source)) {
+					ret = sof_route_setup(sdev, p->source, widget);
+					if (ret < 0)
+						return ret;
+				}
+		}
+	}
+
+	return 0;
+}
+
+static struct snd_sof_widget *sof_find_pipeline_by_id(struct snd_sof_dev *sdev, int pipeline_id)
+{
+	struct snd_sof_widget *swidget;
+
+	list_for_each_entry(swidget, &sdev->widget_list, list)
+		if (swidget->id == snd_soc_dapm_scheduler && swidget->pipeline_id == pipeline_id)
+			return swidget;
+
+	return NULL;
+}
+
+int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir)
+{
+	struct snd_soc_dapm_widget_list *list = spcm->stream[dir].list;
+	struct snd_soc_dapm_widget *widget;
+	struct snd_sof_widget *w, *_w;
+	int pipe_widget_count = 0;
+	int i, ret;
+	int j;
+
+	/* nothing to set up */
+	if (!list)
+		return 0;
+
+	/* set up widgets in the list */
+	for_each_dapm_widgets(list, i, widget) {
+		struct snd_sof_widget *swidget = widget->dobj.private;
+		struct snd_sof_widget *pipe_widget, *temp_pipe_widget;
+		bool pipeline_found = false;
+
+		if (!swidget)
+			continue;
+
+		ret = sof_widget_setup(sdev, swidget);
+		if (ret < 0)
+			goto widget_free;
+
+		/* find pipeline widget for the pipeline that this widget belongs to */
+		pipe_widget = sof_find_pipeline_by_id(sdev, swidget->pipeline_id);
+		if (!pipe_widget) {
+			ret = -EINVAL;
+			goto widget_free;
+		}
+
+		/* Add it to the spcm pipeline list if it isn't part of it already. */
+		list_for_each_entry(w, &spcm->stream[dir].pipeline_list, list) {
+			if (w->comp_id == pipe_widget->comp_id) {
+				pipeline_found = true;
+				break;
+			}
+		}
+		if (!pipeline_found) {
+			/*
+			 * Pipeline widgets can only be set up after the scheduling
+			 * widget has been set up. Create a temp widget to save it to the spcm
+			 * pipeline list as the original widget is already part of the core's
+			 * widget list.
+			 */
+			temp_pipe_widget = kmemdup(pipe_widget, sizeof(*pipe_widget), GFP_KERNEL);
+			if (!temp_pipe_widget) {
+				ret = -ENOMEM;
+				goto widget_free;
+			}
+
+			list_add(&temp_pipe_widget->list, &spcm->stream[dir].pipeline_list);
+		}
+	}
+
+	/*
+	 * error in setting pipeline connections will result in route status being reset for
+	 * routes that were successfully set up when the widgets are freed.
+	 */
+	ret = sof_setup_pipeline_connections(sdev, list, dir);
+	if (ret < 0)
+		goto widget_free;
+
+	/* setup pipeline widgets and complete pipelines */
+	list_for_each_entry(w, &spcm->stream[dir].pipeline_list, list) {
+		struct snd_sof_widget *pipe_widget = sof_find_widget_by_comp_id(sdev, w->comp_id);
+
+		ret = sof_widget_setup(sdev, pipe_widget);
+		if (ret < 0)
+			goto pipe_free;
+		else
+			pipe_widget_count++;
+
+		if (pipe_widget->complete)
+			continue;
+
+		pipe_widget->complete = snd_sof_complete_pipeline(sdev->dev, pipe_widget);
+		if (pipe_widget->complete < 0) {
+			ret = pipe_widget->complete;
+			goto pipe_free;
+		}
+	}
+
+	return 0;
+
+pipe_free:
+	j = 0;
+
+	/* free the pipe widgets that were setup successfully set up */
+	list_for_each_entry(w, &spcm->stream[dir].pipeline_list, list) {
+		struct snd_sof_widget *pipe_widget = sof_find_widget_by_comp_id(sdev, w->comp_id);
+
+		if (j == pipe_widget_count)
+			break;
+
+		if (pipe_widget)
+			sof_widget_free(sdev, pipe_widget);
+		j++;
+	}
+
+widget_free:
+	/* free all widgets that have been setup successfully */
+	for_each_dapm_widgets(list, j, widget) {
+		/* i is the count of the widgets that were setup successfully */
+		if (j == i)
+			break;
+
+		if (is_sof_widget(widget))
+			sof_widget_free(sdev, widget->dobj.private);
+	}
+
+	/* free the temp_widgets in the pipeline list */
+	list_for_each_entry_safe(w, _w, &spcm->stream[dir].pipeline_list, list) {
+		list_del(&w->list);
+		kfree(w);
+	}
+
+	return ret;
+}
+
+struct snd_sof_widget *sof_find_widget_by_comp_id(struct snd_sof_dev *sdev, int comp_id)
+{
+	struct snd_sof_widget *swidget;
+
+	list_for_each_entry(swidget, &sdev->widget_list, list)
+		if (swidget->comp_id == comp_id)
+			return swidget;
+
+	return NULL;
+}
+
+int sof_widget_list_free(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir)
+{
+	struct snd_soc_dapm_widget_list *list = spcm->stream[dir].list;
+	struct snd_soc_dapm_widget *widget;
+	struct snd_sof_widget *w, *_w;
+	int i;
+
+	/* nothing to free */
+	if (!list)
+		return 0;
+
+	/*
+	 * Free widgets in the list. This can fail but continue freeing other widgets to keep
+	 * use_counts balanced.
+	 */
+	for_each_dapm_widgets(list, i, widget)
+		if (is_sof_widget(widget))
+			sof_widget_free(sdev, widget->dobj.private);
+
+	/* free pipeline widgets */
+	list_for_each_entry_safe(w, _w, &spcm->stream[dir].pipeline_list, list) {
+		struct snd_sof_widget *pipe_widget = sof_find_widget_by_comp_id(sdev, w->comp_id);
+
+		/* this can fail but continue freeing other widgets to keep use_counts balanced */
+		if (pipe_widget)
+			sof_widget_free(sdev, pipe_widget);
+
+		list_del(&w->list);
+		kfree(w);
+	}
+
+	snd_soc_dapm_dai_free_widgets(&list);
+	spcm->stream[dir].list = NULL;
+
+	return 0;
+}
+
 /*
  * Free all widgets. This function should be called after topology parsing is complete to
  * facilitate dynamic widget loading/unloading when a PCM stream is started/stopped.

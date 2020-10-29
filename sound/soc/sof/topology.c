@@ -2401,6 +2401,8 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 	swidget->id = w->id;
 	swidget->pipeline_id = index;
 	swidget->private = NULL;
+	atomic_set(&swidget->use_count, 0);
+
 	memset(&reply, 0, sizeof(reply));
 
 	dev_dbg(scomp->dev, "tplg: ready widget id %d pipe %d type %d name : %s stream %s\n",
@@ -3514,6 +3516,8 @@ static int sof_route_load(struct snd_soc_component *scomp, int index,
 		sroute->route = route;
 		dobj->private = sroute;
 		sroute->private = connect;
+		sroute->src_widget = source_swidget;
+		sroute->sink_widget = sink_swidget;
 
 		/* add route to route list */
 		list_add(&sroute->list, &sdev->route_list);

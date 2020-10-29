@@ -35,6 +35,8 @@ struct snd_sof_pcm_stream {
 	struct sof_ipc_stream_posn posn;
 	struct snd_pcm_substream *substream;
 	struct work_struct period_elapsed_work;
+	struct snd_soc_dapm_widget_list *list; /* list of connected DAPM widgets */
+	struct list_head pipeline_list;
 	bool d0i3_compatible; /* DSP can be in D0I3 when this pcm is opened */
 	/*
 	 * flag to indicate that the DSP pipelines should be kept
@@ -83,6 +85,7 @@ struct snd_sof_widget {
 	int comp_id;
 	int pipeline_id;
 	int complete;
+	atomic_t use_count;
 	int core;
 	int id;
 
@@ -101,6 +104,9 @@ struct snd_sof_route {
 
 	struct snd_soc_dapm_route *route;
 	struct list_head list;	/* list in sdev route list */
+	struct snd_sof_widget *src_widget;
+	struct snd_sof_widget *sink_widget;
+	bool setup;
 
 	void *private;
 };
@@ -199,6 +205,7 @@ struct snd_sof_pcm *snd_sof_find_spcm_comp(struct snd_soc_component *scomp,
 					   int *direction);
 struct snd_sof_pcm *snd_sof_find_spcm_pcm_id(struct snd_soc_component *scomp,
 					     unsigned int pcm_id);
+struct snd_sof_widget *sof_find_widget_by_comp_id(struct snd_sof_dev *sdev, int comp_id);
 const struct sof_ipc_pipe_new *snd_sof_pipeline_find(struct snd_sof_dev *sdev,
 						     int pipeline_id);
 void snd_sof_pcm_period_elapsed(struct snd_pcm_substream *substream);
@@ -223,4 +230,7 @@ bool snd_sof_dsp_only_d0i3_compatible_stream_active(struct snd_sof_dev *sdev);
 int sof_machine_register(struct snd_sof_dev *sdev, void *pdata);
 void sof_machine_unregister(struct snd_sof_dev *sdev, void *pdata);
 
+/* PCM */
+int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir);
+int sof_widget_list_free(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir);
 #endif
