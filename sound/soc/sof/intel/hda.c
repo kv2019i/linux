@@ -51,72 +51,42 @@ static int sdw_clock_stop_quirks = SDW_INTEL_CLK_STOP_BUS_RESET;
 module_param(sdw_clock_stop_quirks, int, 0444);
 MODULE_PARM_DESC(sdw_clock_stop_quirks, "SOF SoundWire clock stop quirks");
 
+/* update the DAI config with the ALH stream_id. The IPC will be sent during FE hw_params */
 static int sdw_params_stream(struct device *dev,
 			     struct sdw_intel_stream_params_data *params_data)
 {
 	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
 	struct snd_soc_dai *d = params_data->dai;
-	struct sof_ipc_dai_config config;
-	struct sof_ipc_reply reply;
+	struct snd_pcm_substream *substream = params_data->substream;
+	struct sof_ipc_dai_config *config;
+	struct snd_sof_dai *sof_dai;
 	int link_id = params_data->link_id;
 	int alh_stream_id = params_data->alh_stream_id;
-	int ret;
-	u32 size = sizeof(config);
 
-	memset(&config, 0, size);
-	config.hdr.size = size;
-	config.hdr.cmd = SOF_IPC_GLB_DAI_MSG | SOF_IPC_DAI_CONFIG;
-	config.type = SOF_DAI_INTEL_ALH;
-	config.dai_index = (link_id << 8) | (d->id);
-	config.alh.stream_id = alh_stream_id;
+	list_for_each_entry(sof_dai, &sdev->dai_list, list) {
+		if (!sof_dai->cpu_dai_name)
+			continue;
 
-	/* send message to DSP */
-	ret = sof_ipc_tx_message(sdev->ipc,
-				 config.hdr.cmd, &config, size, &reply,
-				 sizeof(reply));
-	if (ret < 0) {
-		dev_err(sdev->dev,
-			"error: failed to set DAI hw_params for link %d dai->id %d ALH %d\n",
-			link_id, d->id, alh_stream_id);
+		config = sof_dai->dai_config;
+		if (!config) {
+			dev_err(dev, "error: no config for DAI %s\n",	sof_dai->name);
+			return -EINVAL;
+		}
+
+		if (!strcmp(d->name, sof_dai->cpu_dai_name) &&
+		    substream->stream == sof_dai->comp_dai.direction) {
+			config->dai_index = (link_id << 8) | (d->id);
+			config->alh.stream_id = alh_stream_id;
+			return 0;
+		}
 	}
 
-	return ret;
-}
-
-static int sdw_free_stream(struct device *dev,
-			   struct sdw_intel_stream_free_data *free_data)
-{
-	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
-	struct snd_soc_dai *d = free_data->dai;
-	struct sof_ipc_dai_config config;
-	struct sof_ipc_reply reply;
-	int link_id = free_data->link_id;
-	int ret;
-	u32 size = sizeof(config);
-
-	memset(&config, 0, size);
-	config.hdr.size = size;
-	config.hdr.cmd = SOF_IPC_GLB_DAI_MSG | SOF_IPC_DAI_CONFIG;
-	config.type = SOF_DAI_INTEL_ALH;
-	config.dai_index = (link_id << 8) | d->id;
-	config.alh.stream_id = 0xFFFF; /* invalid value on purpose */
-
-	/* send message to DSP */
-	ret = sof_ipc_tx_message(sdev->ipc,
-				 config.hdr.cmd, &config, size, &reply,
-				 sizeof(reply));
-	if (ret < 0) {
-		dev_err(sdev->dev,
-			"error: failed to free stream for link %d dai->id %d\n",
-			link_id, d->id);
-	}
-
-	return ret;
+	dev_err(dev, "error: failed to update DAI config for: %s\n", d->name);
+	return -EINVAL;
 }
 
 static const struct sdw_intel_ops sdw_callback = {
 	.params_stream = sdw_params_stream,
-	.free_stream = sdw_free_stream,
 };
 
 void hda_sdw_int_enable(struct snd_sof_dev *sdev, bool enable)

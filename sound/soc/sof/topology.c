@@ -2273,6 +2273,14 @@ static int sof_process_load(struct snd_soc_component *scomp, int index,
 		goto err;
 	}
 
+	/*
+	 * For process components with large config, snd_sof_ipc_set_get_comp_data() will attempt
+	 * to find the widget. So add the widget to the widget_list and set its use_count before
+	 * sending the config.
+	 */
+	list_add(&swidget->list, &sdev->widget_list);
+	atomic_inc(&swidget->use_count);
+
 	/* we sent the data in single message so return */
 	if (ipc_data_size)
 		goto out;
@@ -2534,7 +2542,12 @@ static int sof_widget_ready(struct snd_soc_component *scomp, int index,
 	}
 
 	w->dobj.private = swidget;
-	list_add(&swidget->list, &sdev->widget_list);
+
+	/* process components already handle this in sof_process_load() */
+	if (w->id != snd_soc_dapm_effect) {
+		list_add(&swidget->list, &sdev->widget_list);
+		atomic_inc(&swidget->use_count);
+	}
 	return ret;
 }
 
@@ -2671,6 +2684,7 @@ static int sof_dai_load(struct snd_soc_component *scomp, int index,
 		spcm->stream[stream].comp_id = COMP_ID_UNASSIGNED;
 		INIT_WORK(&spcm->stream[stream].period_elapsed_work,
 			  snd_sof_pcm_period_elapsed_work);
+		INIT_LIST_HEAD(&spcm->stream[stream].pipeline_list);
 	}
 
 	spcm->pcm = *pcm;
@@ -3624,6 +3638,12 @@ static void sof_complete(struct snd_soc_component *scomp)
 	 * IPC. It may be overwritten by alsa-mixer after booting up
 	 */
 	snd_sof_cache_kcontrol_val(scomp);
+
+	/*
+	 * Free all widgets from the firmware except the SSP and DMIC DAI widgets.
+	 * They will be set up as needed when a PCM is started
+	 */
+	sof_widgets_free_all(scomp);
 }
 
 /* manifest - optional to inform component of manifest */

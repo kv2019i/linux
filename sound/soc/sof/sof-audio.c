@@ -54,14 +54,6 @@ static int sof_dai_config_setup(struct snd_sof_dev *sdev, struct snd_sof_dai *da
 		return -EINVAL;
 	}
 
-	/*
-	 * The link DMA channel would be invalidated for running streams but not for streams that
-	 * were in the PAUSED state during suspend. So invalidate it here before setting the dai
-	 * config in the DSP.
-	 */
-	if (config->type == SOF_DAI_INTEL_HDA)
-		config->hda.link_dma_ch = DMA_CHAN_INVALID;
-
 	ret = sof_ipc_tx_message(sdev->ipc, config->hdr.cmd, config, config->hdr.size,
 				 &reply, sizeof(reply));
 
@@ -69,6 +61,34 @@ static int sof_dai_config_setup(struct snd_sof_dev *sdev, struct snd_sof_dai *da
 		dev_err(sdev->dev, "error: failed to set dai config for %s\n", dai->name);
 
 	return ret;
+}
+
+static int sof_widget_kcontrol_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget)
+{
+	struct snd_sof_control *scontrol;
+	int ret;
+
+	/* set up all controls for the widget */
+	list_for_each_entry(scontrol, &sdev->kcontrol_list, list)
+		if (scontrol->comp_id == swidget->comp_id) {
+			ret = sof_kcontrol_setup(sdev, scontrol);
+			if (ret < 0) {
+				dev_err(sdev->dev, "error: fail to set up kcontrols for widget %s\n",
+					swidget->widget->name);
+				return ret;
+			}
+		}
+
+	return 0;
+}
+
+static void sof_reset_route_setup_status(struct snd_sof_dev *sdev, struct snd_sof_widget *widget)
+{
+	struct snd_sof_route *sroute;
+
+	list_for_each_entry(sroute, &sdev->route_list, list)
+		if (sroute->src_widget == widget || sroute->sink_widget == widget)
+			sroute->setup = false;
 }
 
 static int sof_widget_free(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget)
@@ -82,6 +102,10 @@ static int sof_widget_free(struct snd_sof_dev *sdev, struct snd_sof_widget *swid
 	};
 	struct sof_ipc_reply reply;
 	int ret;
+
+	/* only free when refcount is 0 */
+	if (!atomic_dec_and_test(&swidget->use_count))
+		return 0;
 
 	if (!swidget->private)
 		return 0;
@@ -102,7 +126,10 @@ static int sof_widget_free(struct snd_sof_dev *sdev, struct snd_sof_widget *swid
 				 &reply, sizeof(reply));
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to free widget %s\n", swidget->widget->name);
+		atomic_inc(&swidget->use_count);
 	} else {
+		/* reset route setup status for all routes that contain this widget */
+		sof_reset_route_setup_status(sdev, swidget);
 		swidget->complete = 0;
 		dev_dbg(sdev->dev, "widget %s freed\n", swidget->widget->name);
 	}
@@ -120,6 +147,10 @@ static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swi
 	size_t ipc_size;
 	int ret;
 
+	/* widget already set up */
+	if (atomic_inc_return(&swidget->use_count) > 1)
+		return 0;
+
 	/* skip if there is no private data */
 	if (!swidget->private)
 		return 0;
@@ -128,7 +159,7 @@ static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swi
 	if (ret < 0) {
 		dev_err(sdev->dev, "error: failed to enable target core: %d for widget %s\n",
 			ret, swidget->widget->name);
-		return ret;
+		goto use_count_free;
 	}
 
 	switch (swidget->id) {
@@ -148,6 +179,19 @@ static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swi
 
 		ret = sof_ipc_tx_message(sdev->ipc, comp->hdr.cmd, comp, ipc_size, &r, sizeof(r));
 		kfree(comp);
+		if (ret < 0) {
+			dev_err(sdev->dev, "error: failed to load widget %s\n",
+				swidget->widget->name);
+			goto use_count_free;
+		}
+
+		ret = sof_dai_config_setup(sdev, dai);
+		if (ret < 0) {
+			dev_err(sdev->dev, "error: failed to load dai config for DAI %s\n",
+				swidget->widget->name);
+			sof_widget_free(sdev, swidget);
+			return ret;
+		}
 		break;
 	case snd_soc_dapm_scheduler:
 		pipeline = swidget->private;
@@ -159,12 +203,25 @@ static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swi
 					 &r, sizeof(r));
 		break;
 	}
-	if (ret < 0)
-		dev_err(sdev->dev, "error: failed to load widget type %s\n",
-			swidget->widget->name);
-	else
-		dev_dbg(sdev->dev, "widget %s setup complete\n", swidget->widget->name);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to load widget %s\n", swidget->widget->name);
+		goto use_count_free;
+	}
 
+	/* restore kcontrols for widget */
+	ret = sof_widget_kcontrol_setup(sdev, swidget);
+	if (ret < 0) {
+		dev_err(sdev->dev, "error: failed to restore kcontrols for widget %s\n",
+			swidget->widget->name);
+		sof_widget_free(sdev, swidget);
+		return ret;
+	}
+
+	dev_dbg(sdev->dev, "widget %s setup complete\n", swidget->widget->name);
+	return 0;
+
+use_count_free:
+	atomic_dec(&swidget->use_count);
 	return ret;
 }
 
@@ -370,8 +427,8 @@ int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, in
 		ret = sof_widget_setup(sdev, pipe_widget);
 		if (ret < 0)
 			goto pipe_free;
-		else
-			pipe_widget_count++;
+
+		pipe_widget_count++;
 
 		if (pipe_widget->complete)
 			continue;
@@ -568,22 +625,6 @@ int sof_set_hw_params_upon_resume(struct device *dev)
 	return snd_sof_dsp_hw_params_upon_resume(sdev);
 }
 
-static int sof_restore_kcontrols(struct device *dev)
-{
-	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
-	struct snd_sof_control *scontrol;
-	int ret = 0;
-
-	/* restore kcontrol values */
-	list_for_each_entry(scontrol, &sdev->kcontrol_list, list) {
-		ret = sof_kcontrol_setup(sdev, scontrol);
-		if (ret < 0)
-			return ret;
-	}
-
-	return 0;
-}
-
 const struct sof_ipc_pipe_new *snd_sof_pipeline_find(struct snd_sof_dev *sdev,
 						     int pipeline_id)
 {
@@ -598,77 +639,6 @@ const struct sof_ipc_pipe_new *snd_sof_pipeline_find(struct snd_sof_dev *sdev,
 		}
 
 	return NULL;
-}
-
-int sof_restore_pipelines(struct device *dev)
-{
-	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
-	struct snd_sof_widget *swidget;
-	struct snd_sof_route *sroute;
-	struct snd_sof_dai *dai;
-	int ret;
-
-	/* restore pipeline components */
-	list_for_each_entry_reverse(swidget, &sdev->widget_list, list) {
-		ret = sof_widget_setup(sdev, swidget);
-		if (ret < 0)
-			return ret;
-	}
-
-	/* restore pipeline connections */
-	list_for_each_entry_reverse(sroute, &sdev->route_list, list) {
-		struct sof_ipc_pipe_comp_connect *connect;
-		struct sof_ipc_reply reply;
-
-		/* skip if there's no private data */
-		if (!sroute->private)
-			continue;
-
-		connect = sroute->private;
-
-		/* send ipc */
-		ret = sof_ipc_tx_message(sdev->ipc,
-					 connect->hdr.cmd,
-					 connect, sizeof(*connect),
-					 &reply, sizeof(reply));
-		if (ret < 0) {
-			dev_err(dev,
-				"error: failed to load route sink %s control %s source %s\n",
-				sroute->route->sink,
-				sroute->route->control ? sroute->route->control
-					: "none",
-				sroute->route->source);
-
-			return ret;
-		}
-	}
-
-	/* restore dai links */
-	list_for_each_entry_reverse(dai, &sdev->dai_list, list) {
-		ret = sof_dai_config_setup(sdev, dai);
-		if (ret < 0)
-			return ret;
-	}
-
-	/* complete pipeline */
-	list_for_each_entry(swidget, &sdev->widget_list, list) {
-		switch (swidget->id) {
-		case snd_soc_dapm_scheduler:
-			swidget->complete =
-				snd_sof_complete_pipeline(dev, swidget);
-			break;
-		default:
-			break;
-		}
-	}
-
-	/* restore pipeline kcontrols */
-	ret = sof_restore_kcontrols(dev);
-	if (ret < 0)
-		dev_err(dev,
-			"error: restoring kcontrols after resume\n");
-
-	return ret;
 }
 
 /*
