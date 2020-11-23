@@ -43,11 +43,35 @@ static int sof_kcontrol_setup(struct snd_sof_dev *sdev, struct snd_sof_control *
 	return ret;
 }
 
-static int sof_dai_config_setup(struct snd_sof_dev *sdev, struct snd_sof_dai *dai)
+static struct sof_ipc_dai_config* sof_dai_config_match(struct snd_sof_dev *sdev,
+						       struct snd_sof_dai *dai,
+						       struct sof_ipc_pcm_params *ipc_pcm)
 {
+	int sample_rate = ipc_pcm->params.rate;
+	int num_conf = dai->num_conf;
+	int i;
+
+	/* match for ssp sample rate and fsync for now, otherwise use default config */
+	for (i = 0; i < num_conf; i++) {
+		if (dai->dai_config[i].type == SOF_DAI_INTEL_SSP &&
+		    sample_rate == dai->dai_config[i].ssp.fsync_rate) {
+			dev_dbg(sdev->dev, "found dai config match at index %d\n", i);
+			return &dai->dai_config[i];
+		}
+	}
+
+	dev_dbg(sdev->dev, "using default dai config %d\n", dai->def_conf);
+	return &dai->dai_config[dai->def_conf];
+}
+
+static int sof_dai_config_setup(struct snd_sof_dev *sdev, struct snd_sof_dai *dai,
+				struct sof_ipc_pcm_params *ipc_pcm)
+{
+	struct sof_ipc_dai_config *config;
 	struct sof_ipc_reply reply;
-	struct sof_ipc_dai_config *config = dai->dai_config;
 	int ret;
+
+	config = sof_dai_config_match(sdev, dai, ipc_pcm);
 
 	if (!config) {
 		dev_err(sdev->dev, "error: no config for DAI %s\n", dai->name);
@@ -137,7 +161,8 @@ static int sof_widget_free(struct snd_sof_dev *sdev, struct snd_sof_widget *swid
 	return ret;
 }
 
-static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget)
+static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swidget,
+			    struct sof_ipc_pcm_params *ipc_pcm)
 {
 	struct sof_ipc_pipe_new *pipeline;
 	struct sof_ipc_comp_reply r;
@@ -185,7 +210,7 @@ static int sof_widget_setup(struct snd_sof_dev *sdev, struct snd_sof_widget *swi
 			goto use_count_free;
 		}
 
-		ret = sof_dai_config_setup(sdev, dai);
+		ret = sof_dai_config_setup(sdev, dai, ipc_pcm);
 		if (ret < 0) {
 			dev_err(sdev->dev, "error: failed to load dai config for DAI %s\n",
 				swidget->widget->name);
@@ -355,7 +380,8 @@ static struct snd_sof_widget *sof_find_pipeline_by_id(struct snd_sof_dev *sdev, 
 	return NULL;
 }
 
-int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir)
+int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, int dir,
+			  struct sof_ipc_pcm_params *ipc_pcm)
 {
 	struct snd_soc_dapm_widget_list *list = spcm->stream[dir].list;
 	struct snd_soc_dapm_widget *widget;
@@ -377,7 +403,7 @@ int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, in
 		if (!swidget)
 			continue;
 
-		ret = sof_widget_setup(sdev, swidget);
+		ret = sof_widget_setup(sdev, swidget, ipc_pcm);
 		if (ret < 0)
 			goto widget_free;
 
@@ -424,7 +450,7 @@ int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, in
 	list_for_each_entry(w, &spcm->stream[dir].pipeline_list, list) {
 		struct snd_sof_widget *pipe_widget = sof_find_widget_by_comp_id(sdev, w->comp_id);
 
-		ret = sof_widget_setup(sdev, pipe_widget);
+		ret = sof_widget_setup(sdev, pipe_widget, ipc_pcm);
 		if (ret < 0)
 			goto pipe_free;
 
