@@ -78,6 +78,7 @@ struct hdmi_spec_per_pin {
 	int pcm_idx; /* which pcm is attached. -1 means no pcm is attached */
 	int repoll_count;
 	bool setup; /* the stream has been set up by prepare callback */
+	bool silent_stream;
 	int channels; /* current number of channels */
 	bool non_pcm;
 	bool chmap_set;		/* channel-map override by ALSA API? */
@@ -979,6 +980,13 @@ static int hdmi_choose_cvt(struct hda_codec *codec,
 	else
 		per_pin = get_pin(spec, pin_idx);
 
+	if (per_pin && per_pin->silent_stream) {
+		cvt_idx = cvt_nid_to_cvt_index(codec, per_pin->cvt_nid);
+		if (cvt_id)
+			*cvt_id = cvt_idx;
+		return 0;
+	}
+
 	/* Dynamically assign converter to stream */
 	for (cvt_idx = 0; cvt_idx < spec->num_cvts; cvt_idx++) {
 		per_cvt = get_cvt(spec, cvt_idx);
@@ -1642,28 +1650,89 @@ static void hdmi_present_sense_via_verbs(struct hdmi_spec_per_pin *per_pin,
 	snd_hda_power_down_pm(codec);
 }
 
-static void silent_stream_enable(struct hda_codec *codec,
-				struct hdmi_spec_per_pin *per_pin)
-{
-	unsigned int newval, oldval;
+#define INTEL_SILENTSTR_RATE		48000
+#define INTEL_SILENTSTR_CHANNELS		2
+#define INTEL_SILENTSTR_FORMAT		SNDRV_PCM_FORMAT_S16_LE
+#define INTEL_SILENTSTR_TAG		0xf
 
-	codec_dbg(codec, "hdmi: enabling silent stream for NID %d\n",
-			per_pin->pin_nid);
+static void silent_stream_enable(struct hda_codec *codec,
+				 struct hdmi_spec_per_pin *per_pin)
+{
+	struct hdmi_spec_per_cvt *per_cvt = NULL;
+	struct hdmi_spec *spec = codec->spec;
+	int cvt_idx, pin_idx, err;
+	unsigned int format;
+
+	codec_dbg(codec, "hdmi: enabling silent stream NID=0x%x\n", per_pin->pin_nid);
 
 	mutex_lock(&per_pin->lock);
 
 	if (!per_pin->channels)
-		per_pin->channels = 2;
+		per_pin->channels = INTEL_SILENTSTR_CHANNELS;
 
-	oldval = snd_hda_codec_read(codec, per_pin->pin_nid, 0,
-			AC_VERB_GET_CONV, 0);
-	newval = (oldval & 0xF0) | 0xF;
-	snd_hda_codec_write(codec, per_pin->pin_nid, 0,
-			AC_VERB_SET_CHANNEL_STREAMID, newval);
+	if (per_pin->setup) {
+		codec_dbg(codec, "hdmi: PCM already open, no silent stream\n");
+		goto unlock_out;
+	}
 
 	hdmi_setup_audio_infoframe(codec, per_pin, per_pin->non_pcm);
 
+	pin_idx = pin_id_to_pin_index(codec, per_pin->pin_nid, per_pin->dev_id);
+	err = hdmi_choose_cvt(codec, pin_idx, &cvt_idx);
+	if (err) {
+		codec_err(codec, "hdmi: no free converter to enable silent mode\n");
+		goto unlock_out;
+	}
+
+	per_cvt = get_cvt(spec, cvt_idx);
+	per_cvt->assigned = 1;
+	per_pin->cvt_nid = per_cvt->cvt_nid;
+	per_pin->silent_stream = true;
+
+	snd_hda_set_dev_select(codec, per_pin->pin_nid, per_pin->dev_id);
+	snd_hda_codec_write_cache(codec, per_pin->pin_nid, 0,
+				  AC_VERB_SET_CONNECT_SEL,
+				  per_pin->mux_idx);
+
+	/* configure unused pins to choose other converters */
+	pin_cvt_fixup(codec, per_pin, 0);
+
+	snd_hdac_sync_audio_rate(&codec->core, per_pin->pin_nid,
+				 per_pin->dev_id, INTEL_SILENTSTR_RATE);
+
+	/* trigger silent stream generation in hw */
+	format = snd_hdac_calc_stream_format(INTEL_SILENTSTR_RATE,
+					     per_pin->channels,
+					     INTEL_SILENTSTR_FORMAT,
+					     snd_pcm_format_width(INTEL_SILENTSTR_FORMAT),
+					     0);
+	snd_hda_codec_setup_stream(codec, per_pin->cvt_nid, INTEL_SILENTSTR_TAG, 0xf, format);
+	usleep_range(100, 200);
+	snd_hda_codec_setup_stream(codec, per_pin->cvt_nid, INTEL_SILENTSTR_TAG, 0, format);
+
+ unlock_out:
 	mutex_unlock(&per_pin->lock);
+}
+
+static void silent_stream_disable(struct hda_codec *codec,
+				  struct hdmi_spec_per_pin *per_pin)
+{
+	struct hdmi_spec_per_cvt *per_cvt = NULL;
+	struct hdmi_spec *spec = codec->spec;
+	int cvt_idx;
+
+	if (!per_pin->silent_stream)
+		return;
+
+	codec_dbg(codec, "HDMI: disable silent stream on cvt-NID=0x%x\n", per_pin->cvt_nid);
+	cvt_idx = cvt_nid_to_cvt_index(codec, per_pin->cvt_nid);
+	per_cvt = get_cvt(spec, cvt_idx);
+	WARN_ON(!per_cvt);
+	if (per_cvt)
+		per_cvt->assigned = 0;
+
+	per_pin->cvt_nid = 0;
+	per_pin->silent_stream = false;
 }
 
 /* update ELD and jack state via audio component */
@@ -1701,6 +1770,7 @@ static void sync_eld_via_acomp(struct hda_codec *codec,
 				pm_ret);
 			silent_stream_enable(codec, per_pin);
 		} else if (monitor_prev && !monitor_next) {
+			silent_stream_disable(codec, per_pin);
 			pm_ret = snd_hda_power_down_pm(codec);
 			if (pm_ret < 0)
 				codec_err(codec,
