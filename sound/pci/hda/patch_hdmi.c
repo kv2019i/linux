@@ -1731,6 +1731,12 @@ static void silent_stream_disable(struct hda_codec *codec,
 	if (per_cvt)
 		per_cvt->assigned = 0;
 
+#if 0
+	snd_hda_codec_setup_stream(codec, per_pin->cvt_nid, INTEL_SILENTSTR_TAG, 0xf, 0x11);
+	usleep_range(100, 200);
+	snd_hda_codec_setup_stream(codec, per_pin->cvt_nid, 0, 0xf, 0x11);
+#endif
+
 	per_pin->cvt_nid = 0;
 	per_pin->silent_stream = false;
 }
@@ -2852,12 +2858,39 @@ static void register_i915_notifier(struct hda_codec *codec)
 	codec->relaxed_resume = 1;
 }
 
+static void i915_disable_silent_stream(struct hda_codec *codec, hda_nid_t cvt_nid,
+				      hda_nid_t pin_nid, int dev_id)
+{
+	struct hdmi_spec *spec = codec->spec;
+	struct hdmi_spec_per_pin *per_pin;
+	int pin_idx = pin_id_to_pin_index(codec, pin_nid, dev_id);
+
+	if (pin_idx < 0 || pin_idx >= spec->num_pins)
+		return;
+
+	per_pin = get_pin(spec, pin_idx);
+	if (!per_pin->silent_stream)
+		return;
+
+	/* KV-note: this causes a gap in output */
+#if 0
+	snd_hda_codec_setup_stream(codec, cvt_nid, INTEL_SILENTSTR_TAG, 0xf, 0);
+	usleep_range(100, 200);
+	snd_hda_codec_setup_stream(codec, cvt_nid, 0, 0xf, 0);
+#endif
+	per_pin->silent_stream = false;
+}
+
 /* setup_stream ops override for HSW+ */
 static int i915_hsw_setup_stream(struct hda_codec *codec, hda_nid_t cvt_nid,
 				 hda_nid_t pin_nid, int dev_id, u32 stream_tag,
 				 int format)
 {
+
 	haswell_verify_D0(codec, cvt_nid, pin_nid);
+
+	i915_disable_silent_stream(codec, cvt_nid, pin_nid, dev_id);
+
 	return hdmi_setup_stream(codec, cvt_nid, pin_nid, dev_id,
 				 stream_tag, format);
 }
