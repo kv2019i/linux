@@ -46,6 +46,7 @@
 #define SOF_RT1015_SPEAKER_AMP_PRESENT		BIT(14)
 #define SOF_MAX98373_SPEAKER_AMP_PRESENT	BIT(15)
 #define SOF_MAX98360A_SPEAKER_AMP_PRESENT	BIT(16)
+#define SOF_BT_OFFLOAD_PRESENT		BIT(17)
 
 /* Default: MCLK on, MCLK 19.2M, SSP0  */
 static unsigned long sof_rt5682_quirk = SOF_RT5682_MCLK_EN |
@@ -534,6 +535,13 @@ static struct snd_soc_dai_link_component rt1015_components[] = {
 	},
 };
 
+static struct snd_soc_dai_link_component dummy_component[] = {
+	{
+		.name = "snd-soc-dummy",
+		.dai_name = "snd-soc-dummy-dai",
+	}
+};
+
 static struct snd_soc_dai_link *sof_card_dai_links_create(struct device *dev,
 							  int ssp_codec,
 							  int ssp_amp,
@@ -721,6 +729,25 @@ static struct snd_soc_dai_link *sof_card_dai_links_create(struct device *dev,
 			if (!links[id].cpus->dai_name)
 				goto devm_err;
 		}
+		id++;
+	}
+
+	/* bt-offload */
+	if (sof_rt5682_quirk & SOF_BT_OFFLOAD_PRESENT) {
+		/* enabled on ssp2 by default */
+		links[id].id = id;
+		links[id].cpus = &cpus[id];
+		links[id].cpus->dai_name = "SSP2 Pin";
+		links[id].name = "SSP2-Codec";
+		links[id].codecs = dummy_component;
+		links[id].num_codecs = ARRAY_SIZE(dummy_component);
+		links[id].platforms = platform_component;
+		links[id].num_platforms = ARRAY_SIZE(platform_component);
+		links[id].nonatomic = true;
+		links[id].dpcm_playback = 1;
+		links[id].dpcm_capture = 1;
+		links[id].no_pcm = 1;
+		links[id].num_cpus = 1;
 	}
 
 	return links;
@@ -808,6 +835,9 @@ static int sof_audio_probe(struct platform_device *pdev)
 	else if (sof_rt5682_quirk & SOF_RT1011_SPEAKER_AMP_PRESENT)
 		sof_rt1011_codec_conf(&sof_audio_card_rt5682);
 
+	if (sof_rt5682_quirk & SOF_BT_OFFLOAD_PRESENT)
+		sof_audio_card_rt5682.num_links++;
+
 	dai_links = sof_card_dai_links_create(&pdev->dev, ssp_codec, ssp_amp,
 					      dmic_be_num, hdmi_num);
 	if (!dai_links)
@@ -866,6 +896,7 @@ static const struct platform_device_id board_ids[] = {
 					SOF_SPEAKER_AMP_PRESENT |
 					SOF_MAX98373_SPEAKER_AMP_PRESENT |
 					SOF_RT5682_SSP_AMP(1) |
+					SOF_BT_OFFLOAD_PRESENT |
 					SOF_RT5682_NUM_HDMIDEV(4)),
 	},
 	{
