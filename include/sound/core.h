@@ -120,6 +120,10 @@ struct snd_card {
 	int sync_irq;			/* assigned irq, used for PCM sync */
 	wait_queue_head_t remove_sleep;
 
+#ifdef CONFIG_SND_DEBUG
+	struct dentry *debugfs_root;    /* debugfs root for card */
+#endif
+
 #ifdef CONFIG_PM
 	unsigned int power_state;	/* power state */
 	wait_queue_head_t power_sleep;
@@ -177,6 +181,9 @@ static inline struct device *snd_card_get_device_link(struct snd_card *card)
 extern int snd_major;
 extern int snd_ecards_limit;
 extern struct class *sound_class;
+#ifdef CONFIG_SND_DEBUG
+extern struct dentry *sound_debugfs_root;
+#endif
 
 void snd_request_card(int card);
 
