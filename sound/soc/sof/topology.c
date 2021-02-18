@@ -3302,11 +3302,6 @@ static int sof_link_load(struct snd_soc_component *scomp, int index,
 	hw_config = cfg->hw_config;
 	num_conf = le32_to_cpu(cfg->num_hw_configs);
 	if (!num_conf) {
-		if (config->type != SOF_DAI_INTEL_HDA) {
-			dev_err(scomp->dev, "error: unexpected DAI config count %d!\n",
-				le32_to_cpu(cfg->num_hw_configs));
-			return -EINVAL;
-		}
 		num_conf = 1;
 	} else {
 		dev_dbg(scomp->dev, "tplg: %d hw_configs found, default id: %d!\n",
