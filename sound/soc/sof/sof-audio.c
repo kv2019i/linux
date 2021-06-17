@@ -466,7 +466,7 @@ int sof_widget_list_setup(struct snd_sof_dev *sdev, struct snd_sof_pcm *spcm, in
 		if (pipe_widget->complete)
 			continue;
 
-		pipe_widget->complete = snd_sof_complete_pipeline(sdev->dev, pipe_widget);
+		pipe_widget->complete = snd_sof_complete_pipeline(sdev, pipe_widget);
 		if (pipe_widget->complete < 0) {
 			ret = pipe_widget->complete;
 			goto widget_free;
@@ -631,9 +631,8 @@ const struct sof_ipc_pipe_new *snd_sof_pipeline_find(struct snd_sof_dev *sdev,
 	return NULL;
 }
 
-int sof_set_up_pipelines(struct device *dev, bool verify)
+int sof_set_up_pipelines(struct snd_sof_dev *sdev, bool verify)
 {
-	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
 	struct snd_sof_widget *swidget;
 	struct snd_sof_route *sroute;
 	int ret;
@@ -692,7 +691,7 @@ int sof_set_up_pipelines(struct device *dev, bool verify)
 				continue;
 
 			swidget->complete =
-				snd_sof_complete_pipeline(dev, swidget);
+				snd_sof_complete_pipeline(sdev, swidget);
 			break;
 		default:
 			break;
@@ -706,9 +705,8 @@ int sof_set_up_pipelines(struct device *dev, bool verify)
  * For older firmware, this function doesn't free widgets for static pipelines during suspend.
  * It only resets use_count for all widgets.
  */
-int sof_tear_down_pipelines(struct device *dev, bool verify)
+int sof_tear_down_pipelines(struct snd_sof_dev *sdev, bool verify)
 {
-	struct snd_sof_dev *sdev = dev_get_drvdata(dev);
 	struct sof_ipc_fw_version *v = &sdev->fw_ready.version;
 	struct snd_sof_widget *swidget;
 	struct snd_sof_route *sroute;
