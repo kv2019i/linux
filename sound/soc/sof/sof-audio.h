@@ -179,9 +179,6 @@ int snd_sof_load_topology(struct snd_soc_component *scomp, const char *file);
 int snd_sof_complete_pipeline(struct device *dev,
 			      struct snd_sof_widget *swidget);
 
-int sof_pipeline_core_enable(struct snd_sof_dev *sdev,
-			     const struct snd_sof_widget *swidget);
-
 /*
  * Stream IPC
  */
