@@ -182,6 +182,8 @@ int hda_dsp_ctrl_clock_power_gating(struct snd_sof_dev *sdev, bool enable)
 	return 0;
 }
 
+#define VS_EM3_ISL1EXT2(x)	(((x) << 20) & GENMASK(21, 20))
+
 int hda_dsp_ctrl_init_chip(struct snd_sof_dev *sdev, bool full_reset)
 {
 	struct hdac_bus *bus = sof_to_bus(sdev);
@@ -190,6 +192,7 @@ int hda_dsp_ctrl_init_chip(struct snd_sof_dev *sdev, bool full_reset)
 #endif
 	struct hdac_stream *stream;
 	int sd_offset, ret = 0;
+	u32 val;
 
 	if (bus->chip_init)
 		return 0;
@@ -250,6 +253,11 @@ int hda_dsp_ctrl_init_chip(struct snd_sof_dev *sdev, bool full_reset)
 				  sd_offset + SOF_HDA_ADSP_REG_CL_SD_STS,
 				  SOF_HDA_CL_DMA_SD_INT_MASK);
 	}
+
+	val = snd_hdac_chip_readl(bus, VS_EM3L);
+	val |= VS_EM3_ISL1EXT2(3);
+	snd_hdac_chip_writel(bus, VS_EM3L, val);
+	dev_dbg(bus->dev, "DEBUG: EM3L 0x%08x (updated)\n", val);
 
 	/* clear WAKESTS */
 	snd_sof_dsp_write(sdev, HDA_DSP_HDA_BAR, SOF_HDA_WAKESTS,
