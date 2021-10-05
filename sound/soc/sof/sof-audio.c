@@ -705,6 +705,74 @@ int sof_set_up_pipelines(struct snd_sof_dev *sdev, bool verify)
 	return 0;
 }
 
+int sof_pcm_stream_free(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream,
+			struct snd_sof_pcm *spcm, int dir, bool free_widget_list)
+{
+	int ret;
+
+	/* Send PCM_FREE IPC to reset pipeline */
+	ret = sof_pcm_dsp_pcm_free(substream, sdev, spcm);
+	if (ret < 0)
+		return ret;
+
+	/* stop the DMA */
+	ret = snd_sof_pcm_platform_hw_free(sdev, substream);
+	if (ret < 0)
+		return ret;
+
+	/* free widget list */
+	if (free_widget_list) {
+		ret = sof_widget_list_free(sdev, spcm, dir);
+		if (ret < 0)
+			dev_err(sdev->dev, "failed to free widgets during suspend\n");
+	}
+
+	return ret;
+}
+
+/*
+ * Free the PCM, its associated widgets and set the prepared flag to false for all PCMs that
+ * did not get suspended(ex: paused streams) so the widgets can be set up again during resume.
+ */
+static int sof_tear_down_left_over_pipelines(struct snd_sof_dev *sdev)
+{
+	struct snd_sof_widget *swidget;
+	struct snd_sof_pcm *spcm;
+	int dir, ret;
+
+	/*
+	 * free all PCMs and their associated DAPM widgets if their connected DAPM widget
+	 * list is not NULL. This should only be true for paused streams at this point.
+	 * This is equivalent to the handling of FE DAI suspend trigger for running streams.
+	 */
+	list_for_each_entry(spcm, &sdev->pcm_list, list)
+		for_each_pcm_streams(dir) {
+			struct snd_pcm_substream *substream = spcm->stream[dir].substream;
+
+			if (!substream || !substream->runtime)
+				continue;
+
+			if (spcm->stream[dir].list) {
+				ret = sof_pcm_stream_free(sdev, substream, spcm, dir, true);
+				if (ret < 0)
+					return ret;
+			}
+		}
+
+	/*
+	 * free any left over DAI widgets. This is equivalent to the handling of suspend trigger
+	 * for the BE DAI for running streams.
+	 */
+	list_for_each_entry(swidget, &sdev->widget_list, list)
+		if (WIDGET_IS_DAI(swidget->id) && swidget->use_count == 1) {
+			ret = sof_widget_free(sdev, swidget);
+			if (ret < 0)
+				return ret;
+		}
+
+	return 0;
+}
+
 /*
  * For older firmware, this function doesn't free widgets for static pipelines during suspend.
  * It only resets use_count for all widgets.
