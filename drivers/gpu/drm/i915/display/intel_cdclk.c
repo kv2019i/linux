@@ -1250,7 +1250,7 @@ static const struct intel_cdclk_vals bxt_cdclk_table[] = {
 };
 
 static const struct intel_cdclk_vals glk_cdclk_table[] = {
-	{ .refclk = 19200, .cdclk =  79200, .divider = 8, .ratio = 33 },
+	//{ .refclk = 19200, .cdclk =  79200, .divider = 8, .ratio = 33 },
 	{ .refclk = 19200, .cdclk = 158400, .divider = 4, .ratio = 33 },
 	{ .refclk = 19200, .cdclk = 316800, .divider = 2, .ratio = 33 },
 	{}

@@ -1020,6 +1020,12 @@ static void glk_force_audio_cdclk(struct drm_i915_private *dev_priv,
 	struct intel_crtc *crtc;
 	int ret;
 
+	if (IS_GEMINILAKE(dev_priv)) {
+		drm_info(&dev_priv->drm,
+			"DEBUG: ignoring cdclk change for audio On GLK\n");
+		return;
+	}
+
 	crtc = intel_first_crtc(dev_priv);
 	if (!crtc)
 		return;
