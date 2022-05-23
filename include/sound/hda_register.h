@@ -129,6 +129,10 @@ enum { SDI0, SDI1, SDI2, SDI3, SDO0, SDO1, SDO2, SDO3 };
 #define AZX_REG_VS_SDXEFIFOS_XBASE	0x1094
 #define AZX_REG_VS_SDXEFIFOS_XINTERVAL	0x20
 
+/* Meteor Lake vendor specific register */
+#define AZX_REG_VS_INTEL_MTL_IOSFTL	0x1C00
+#define AZX_REG_VS_INTEL_MTL_EM1	0x1C40
+
 /* PCI space */
 #define AZX_PCIREG_TCSEL		0x44
 

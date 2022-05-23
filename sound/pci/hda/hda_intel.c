@@ -574,6 +574,9 @@ static void hda_intel_init_chip(struct azx *chip, bool full_reset)
 	if (IS_BXT(pci))
 		bxt_reduce_dma_latency(chip);
 
+	val = azx_readl(chip, VS_INTEL_MTL_EM1);
+	dev_err(chip->card->dev, "HDA debug VS_INTEL_MTL_EM1 %08x\n", val);
+
 	if (bus->mlcap != NULL)
 		intel_init_lctl(chip);
 }
