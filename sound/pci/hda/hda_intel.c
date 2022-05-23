@@ -574,6 +574,27 @@ static void hda_intel_init_chip(struct azx *chip, bool full_reset)
 	if (IS_BXT(pci))
 		bxt_reduce_dma_latency(chip);
 
+	val = azx_readl(chip, VS_EM1);
+	dev_err(chip->card->dev, "HDA debug VS_EM1 %08x\n", val);
+	val = azx_readl(chip, VS_INTEL_MTL_EM1);
+	dev_err(chip->card->dev, "HDA debug VS_INTEL_MTL_EM1 %08x\n", val);
+	val = azx_readl(chip, VS_INTEL_MTL_EM1_HDAVS);
+	dev_err(chip->card->dev, "HDA debug VS_INTEL_MTL_EM1_HDAVS %08x\n", val);
+
+	val = azx_readl(chip, VS_EM2);
+	dev_err(chip->card->dev, "HDA debug VS_EM2 %08x\n", val);
+	val = azx_readl(chip, VS_INTEL_MTL_EM2);
+	dev_err(chip->card->dev, "HDA debug VS_INTEL_MTL_EM2 %08x\n", val);
+	val = azx_readl(chip, VS_INTEL_MTL_EM2_HDAVS);
+	dev_err(chip->card->dev, "HDA debug VS_INTEL_MTL_EM2_HDAVS %08x\n", val);
+
+	val = azx_readl(chip, VS_LTRP);
+	dev_err(chip->card->dev, "HDA debug VS_LTRP %08x\n", val);
+	val = azx_readl(chip, VS_INTEL_MTL_LTRP);
+	dev_err(chip->card->dev, "HDA debug VS_INTEL_MTL_LTRP %08x\n", val);
+	val = azx_readl(chip, VS_INTEL_MTL_LTRP_HDAVS);
+	dev_err(chip->card->dev, "HDA debug VS_INTEL_MTL_LTRP_HDAVS %08x\n", val);
+
 	if (bus->mlcap != NULL)
 		intel_init_lctl(chip);
 }
