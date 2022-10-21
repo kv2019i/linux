@@ -60,6 +60,9 @@ static int hda_setup_bdle(struct snd_sof_dev *sdev,
 				chunk = remain;
 		}
 		bdl->size = cpu_to_le32(chunk);
+
+		dev_info(sdev->dev, "DEBUG: mapped offset %d addr %llx to %08x:%08x chunk:%u\n", offset, addr, (unsigned)bdl->addr_h, (unsigned int)bdl->addr_l, bdl->size);
+
 		/* only program IOC when the whole segment is processed */
 		size -= chunk;
 		bdl->ioc = (size || !ioc) ? 0 : cpu_to_le32(0x01);
