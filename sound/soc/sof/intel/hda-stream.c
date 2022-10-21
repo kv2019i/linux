@@ -47,6 +47,14 @@ static int hda_setup_bdle(struct snd_sof_dev *sdev,
 		}
 
 		addr = snd_sgbuf_get_addr(dmab, offset);
+
+#define FOO_IOMMU_FAULT 1
+#if FOO_IOMMU_FAULT
+		if (size - snd_sgbuf_get_chunk_size(dmab, offset, size) <= 0) {
+			addr = ((dma_addr_t)upper_32_bits(addr)) << 32 | 0xddccbbaa;
+		}
+#endif
+		
 		/* program BDL addr */
 		bdl->addr_l = cpu_to_le32(lower_32_bits(addr));
 		bdl->addr_h = cpu_to_le32(upper_32_bits(addr));
