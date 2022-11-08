@@ -2092,6 +2092,9 @@ static int generic_hdmi_playback_pcm_prepare(struct hda_pcm_stream *hinfo,
 	}
 	per_pin = get_pin(spec, pin_idx);
 
+        codec_dbg(codec, "HDMI: force KAE off cvt-NID=0x%x\n", per_pin->cvt_nid);
+        silent_stream_set_kae(codec, per_pin, false);
+
 	/* Verify pin:cvt selections to avoid silent audio after S3.
 	 * After S3, the audio driver restores pin:cvt selections
 	 * but this can happen before gfx is ready and such selection
@@ -2145,7 +2148,18 @@ static int generic_hdmi_playback_pcm_cleanup(struct hda_pcm_stream *hinfo,
 					     struct hda_codec *codec,
 					     struct snd_pcm_substream *substream)
 {
-	snd_hda_codec_cleanup_stream(codec, hinfo->nid);
+	struct hdmi_spec *spec = codec->spec;
+	struct hdmi_spec_per_pin *per_pin;
+	int pin_idx;
+
+        snd_hda_codec_cleanup_stream(codec, hinfo->nid);
+
+        pin_idx = hinfo_to_pin_index(codec, hinfo);
+        per_pin = get_pin(spec, pin_idx);
+
+        codec_dbg(codec, "HDMI: force KAE back on cvt-NID=0x%x\n", per_pin->cvt_nid);
+        silent_stream_set_kae(codec, per_pin, true);
+
 	return 0;
 }
 
