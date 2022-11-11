@@ -600,11 +600,19 @@ int dma_mmap_pages(struct device *dev, struct vm_area_struct *vma,
 }
 EXPORT_SYMBOL_GPL(dma_mmap_pages);
 
+static bool is_adsp(struct device *dev)
+{
+	return strcmp(dev_name(dev), "0000:00:1f.3") == 0;
+}
+
 static struct sg_table *alloc_single_sgt(struct device *dev, size_t size,
 		enum dma_data_direction dir, gfp_t gfp)
 {
 	struct sg_table *sgt;
 	struct page *page;
+
+	if (is_adsp(dev))
+		pr_info("DEBUG: %s of size %d\n", __func__, size);
 
 	sgt = kmalloc(sizeof(*sgt), gfp);
 	if (!sgt)
@@ -618,8 +626,12 @@ static struct sg_table *alloc_single_sgt(struct device *dev, size_t size,
 	sg_dma_len(sgt->sgl) = sgt->sgl->length;
 	return sgt;
 out_free_table:
+	if (is_adsp(dev))
+		pr_err("ERROR: %s of size %d out_free_table\n", __func__, size);
 	sg_free_table(sgt);
 out_free_sgt:
+	if (is_adsp(dev))
+		pr_err("ERROR: %s of size %d out_free_sgt\n", __func__, size);
 	kfree(sgt);
 	return NULL;
 }

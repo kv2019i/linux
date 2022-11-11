@@ -58,21 +58,35 @@ int dma_common_mmap(struct device *dev, struct vm_area_struct *vma,
 #endif /* CONFIG_MMU */
 }
 
+static bool is_adsp(struct device *dev)
+{
+	return strcmp(dev_name(dev), "0000:00:1f.3") == 0;
+}
+
 struct page *dma_common_alloc_pages(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, enum dma_data_direction dir, gfp_t gfp)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 	struct page *page;
 
+	if (is_adsp(dev))
+		pr_info("DEBUG: %s of size %d\n", __func__, size);
+
 	page = dma_alloc_contiguous(dev, size, gfp);
+	if (!page && is_adsp(dev))
+		pr_warn("WARN: %s of size %d fail 1 (dma_alloc_contiguous)\n", __func__, size);
 	if (!page)
 		page = alloc_pages_node(dev_to_node(dev), gfp, get_order(size));
+	if (!page && is_adsp(dev))
+		pr_err("ERROR: %s of size %d fail 2 (alloc_pages_node)\n", __func__, size);
 	if (!page)
 		return NULL;
 
 	*dma_handle = ops->map_page(dev, page, 0, size, dir,
 				    DMA_ATTR_SKIP_CPU_SYNC);
 	if (*dma_handle == DMA_MAPPING_ERROR) {
+		if (is_adsp(dev))
+			pr_info("ERROR: %s of size %d fail 3 (MAPPING_ERROR)\n", __func__, size);
 		dma_free_contiguous(dev, page, size);
 		return NULL;
 	}
