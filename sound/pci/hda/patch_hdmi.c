@@ -2892,9 +2892,35 @@ static int i915_hsw_setup_stream(struct hda_codec *codec, hda_nid_t cvt_nid,
 				 hda_nid_t pin_nid, int dev_id, u32 stream_tag,
 				 int format)
 {
+	struct hdmi_spec *spec = codec->spec;
+	int pin_idx = pin_id_to_pin_index(codec, pin_nid, dev_id);
+	struct hdmi_spec_per_pin *per_pin = get_pin(spec, pin_idx);
+	int res;
+
 	haswell_verify_D0(codec, cvt_nid, pin_nid);
-	return hdmi_setup_stream(codec, cvt_nid, pin_nid, dev_id,
-				 stream_tag, format);
+
+	if (per_pin && per_pin->silent_stream) {
+		codec_dbg(codec, "HDMI: KAE pause cvt-NID=0x%x\n", per_pin->cvt_nid);
+
+		silent_stream_set_kae(codec, per_pin, false);
+
+		/* wait for pending transfers in codec to clear */
+		usleep_range(100, 200);
+	}
+
+	res = hdmi_setup_stream(codec, cvt_nid, pin_nid, dev_id,
+				stream_tag, format);
+
+	if (per_pin && per_pin->silent_stream) {
+		/* wait for pending transfers in codec to clear */
+		usleep_range(100, 200);
+
+		silent_stream_set_kae(codec, per_pin, true);
+
+		codec_dbg(codec, "HDMI: KAE resumed cvt-NID=0x%x\n", per_pin->cvt_nid);
+	}
+
+	return res;
 }
 
 /* pin_cvt_fixup ops override for HSW+ and VLV+ */
