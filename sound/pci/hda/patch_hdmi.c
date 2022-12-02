@@ -2981,8 +2981,23 @@ static int i915_adlp_hdmi_resume(struct hda_codec *codec)
 		 * keep-alive.
 		 */
 		if (per_pin->silent_stream) {
-			silent_stream_enable_i915(codec, per_pin);
-			silent_stream_set_kae(codec, per_pin, true);
+			unsigned int param;
+
+			param = snd_hda_codec_read(codec, per_pin->cvt_nid, 0, AC_VERB_GET_CONV, 0);
+			codec_dbg(codec, "HDMI: KAE: AC_VERB_GET_CONV %#x\n", param);
+			if (!param) {
+				codec_dbg(codec, "HDMI: KAE: rewrite stream id\n");
+				silent_stream_enable_i915(codec, per_pin);
+			}
+
+			param = snd_hda_codec_read(codec, per_pin->cvt_nid, 0, AC_VERB_GET_DIGI_CONVERT_1, 0);
+
+			codec_dbg(codec, "HDMI: KAE: AC_VERB_GET_DIGI_CONVERT_1 %#x\n", param);
+
+			if (!(param & (AC_DIG3_KAE << 16))) {
+				codec_dbg(codec, "HDMI: KAE: reset DIG3_KAE\n");
+				silent_stream_set_kae(codec, per_pin, true);
+			}
 		}
 	}
 
