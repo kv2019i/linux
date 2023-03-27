@@ -2211,6 +2211,11 @@ static int hdmi_pcm_close(struct hda_pcm_stream *hinfo,
 		per_pin->chmap_set = false;
 		memset(per_pin->chmap, 0, sizeof(per_pin->chmap));
 
+		if (spec->silent_stream_type == SILENT_STREAM_KAE && per_pin && per_pin->silent_stream) {
+			usleep_range(100, 200);
+			silent_stream_set_kae(codec, per_pin, true);
+		}
+
 		per_pin->setup = false;
 		per_pin->channels = 0;
 		mutex_unlock(&per_pin->lock);
@@ -2910,11 +2915,6 @@ static int i915_hsw_setup_stream(struct hda_codec *codec, hda_nid_t cvt_nid,
 
 	res = hdmi_setup_stream(codec, cvt_nid, pin_nid, dev_id,
 				stream_tag, format);
-
-	if (spec->silent_stream_type == SILENT_STREAM_KAE && per_pin && per_pin->silent_stream) {
-		usleep_range(100, 200);
-		silent_stream_set_kae(codec, per_pin, true);
-	}
 
 	return res;
 }
