@@ -2907,10 +2907,24 @@ static int i915_hsw_setup_stream(struct hda_codec *codec, hda_nid_t cvt_nid,
 
 	haswell_verify_D0(codec, cvt_nid, pin_nid);
 
-	if (spec->silent_stream_type == SILENT_STREAM_KAE && per_pin && per_pin->silent_stream) {
-		silent_stream_set_kae(codec, per_pin, false);
-		/* wait for pending transfers in codec to clear */
+	if (per_pin && per_pin->silent_stream) {
+		if (spec->silent_stream_type == SILENT_STREAM_KAE) {
+			silent_stream_set_kae(codec, per_pin, false);
+
+			/* wait for pending transfers in codec to clear */
+			usleep_range(100, 200);
+		}
+
+		/* block samples entering the pipeline */
+		snd_hda_codec_setup_stream(codec, cvt_nid,
+					   I915_SILENT_FMT_MASK, I915_SILENT_FMT_MASK, format);
+		/* wait until pipeline is consumed */
 		usleep_range(100, 200);
+
+		/* stop generation of silence frames */
+		snd_hda_codec_setup_stream(codec, per_pin->cvt_nid, 0, I915_SILENT_FMT_MASK, format);
+
+		codec_dbg(codec, "HDMI: KAE: pipeline flush before streaming\n");
 	}
 
 	res = hdmi_setup_stream(codec, cvt_nid, pin_nid, dev_id,
