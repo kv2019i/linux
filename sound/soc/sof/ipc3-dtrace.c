@@ -427,6 +427,8 @@ static int debugfs_create_dtrace(struct snd_sof_dev *sdev)
 	return 0;
 }
 
+int please_crash = 0;
+
 static int ipc3_dtrace_enable(struct snd_sof_dev *sdev)
 {
 	struct sof_dtrace_priv *priv = sdev->fw_trace_data;
@@ -446,6 +448,9 @@ static int ipc3_dtrace_enable(struct snd_sof_dev *sdev)
 
 	/* set IPC parameters */
 	params.hdr.cmd = SOF_IPC_GLB_TRACE_MSG;
+	if (please_crash)
+		params.hdr.cmd = SOF_IPC_GLB_PROBE;
+
 	/* PARAMS_EXT is only supported from ABI 3.7.0 onwards */
 	if (v->abi_version >= SOF_ABI_VER(3, 7, 0)) {
 		params.hdr.size = sizeof(struct sof_ipc_dma_trace_params_ext);
@@ -646,6 +651,7 @@ static void ipc3_dtrace_suspend(struct snd_sof_dev *sdev, pm_message_t pm_state)
 
 static int ipc3_dtrace_resume(struct snd_sof_dev *sdev)
 {
+	please_crash = 1;
 	return ipc3_dtrace_enable(sdev);
 }
 
