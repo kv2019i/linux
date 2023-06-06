@@ -1065,7 +1065,11 @@ static unsigned long i915_audio_component_get_power(struct device *kdev)
 	/* Catch potential impedance mismatches before they occur! */
 	BUILD_BUG_ON(sizeof(intel_wakeref_t) > sizeof(unsigned long));
 
-	ret = intel_display_power_get(i915, POWER_DOMAIN_AUDIO_PLAYBACK);
+	ret = intel_display_power_get(i915, POWER_DOMAIN_AUDIO_MMIO);
+	ret |= intel_display_power_get(i915, POWER_DOMAIN_AUDIO_PLAYBACK);
+
+	drm_dbg_kms(&i915->drm,
+		    "took both DOMAIN_AUDIO_MMIO and AUDIO_PLAYBACK\n");
 
 	if (i915->display.audio.power_refcount++ == 0) {
 		if (DISPLAY_VER(i915) >= 9) {
@@ -1099,6 +1103,7 @@ static void i915_audio_component_put_power(struct device *kdev,
 			glk_force_audio_cdclk(i915, false);
 
 	intel_display_power_put(i915, POWER_DOMAIN_AUDIO_PLAYBACK, cookie);
+	intel_display_power_put(i915, POWER_DOMAIN_AUDIO_MMIO, cookie);
 }
 
 static void i915_audio_component_codec_wake_override(struct device *kdev,
