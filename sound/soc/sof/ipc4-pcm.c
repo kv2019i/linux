@@ -845,6 +845,7 @@ static snd_pcm_sframes_t sof_ipc4_pcm_delay(struct snd_soc_component *component,
 	snd_pcm_uframes_t head_ptr, tail_ptr;
 	struct snd_sof_pcm_stream *stream;
 	struct snd_sof_pcm *spcm;
+	snd_pcm_sframes_t delay;
 	u64 tmp_ptr;
 	int ret;
 
@@ -901,9 +902,17 @@ static snd_pcm_sframes_t sof_ipc4_pcm_delay(struct snd_soc_component *component,
 	}
 
 	if (head_ptr < tail_ptr)
-		return substream->runtime->boundary - tail_ptr + head_ptr;
+		delay = substream->runtime->boundary - tail_ptr + head_ptr;
+	else
+		delay = head_ptr - tail_ptr;
 
-	return head_ptr - tail_ptr;
+
+	dev_info(sdev->dev, "pcm_delay: d=%ld, tmp=%lu, pos=%lu, hw_ptr=%ld, start=%ld,llp=%x\n",
+		 delay, tmp_ptr, snd_sof_pcm_get_stream_position(sdev, component, substream),
+		 substream->runtime->status->hw_ptr, time_info->stream_start_offset,
+		 time_info->llp_offset);
+
+	return delay;
 }
 
 const struct sof_ipc_pcm_ops ipc4_pcm_ops = {
