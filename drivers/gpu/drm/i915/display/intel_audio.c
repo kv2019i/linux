@@ -408,24 +408,20 @@ hsw_dp_audio_config_update(struct intel_encoder *encoder,
 	tmp &= ~AUD_CONFIG_N_PROG_ENABLE;
 	tmp |= AUD_CONFIG_N_VALUE_INDEX;
 
-	if (rate && nm) {
+	if (nm) {
 		tmp &= ~AUD_CONFIG_N_MASK;
 		tmp |= AUD_CONFIG_N(nm->n);
 		tmp |= AUD_CONFIG_N_PROG_ENABLE;
 	}
-	else {
-		drm_dbg_kms(&i915->drm, "skip N_PROG_ENABLE, rate zero\n");
-	}
 
 	intel_de_write(i915, HSW_AUD_CFG(cpu_transcoder), tmp);
-
 
 	tmp = intel_de_read(i915, HSW_AUD_M_CTS_ENABLE(cpu_transcoder));
 	tmp &= ~AUD_CONFIG_M_MASK;
 	tmp &= ~AUD_M_CTS_M_VALUE_INDEX;
 	tmp &= ~AUD_M_CTS_M_PROG_ENABLE;
 
-	if (rate && nm) {
+	if (nm) {
 		tmp |= nm->m;
 		tmp |= AUD_M_CTS_M_VALUE_INDEX;
 		tmp |= AUD_M_CTS_M_PROG_ENABLE;
