@@ -395,6 +395,11 @@ hsw_dp_audio_config_update(struct intel_encoder *encoder,
 	u32 tmp;
 
 	rate = acomp ? acomp->aud_sample_rate[port] : 0;
+
+	drm_dbg_kms(&i915->drm, "D: port_clock %u, rate %u ->ignore\n", crtc_state->port_clock, rate);
+	/* force automatic Maud/Naud */
+	rate = 0;
+
 	nm = audio_config_dp_get_n_m(crtc_state, rate);
 	if (nm)
 		drm_dbg_kms(&i915->drm, "using Maud %u, Naud %u\n", nm->m,
