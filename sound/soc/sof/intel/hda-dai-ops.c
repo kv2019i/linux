@@ -372,7 +372,9 @@ static int hda_trigger(struct snd_sof_dev *sdev, struct snd_soc_dai *cpu_dai,
 static int hda_ipc4_post_trigger(struct snd_sof_dev *sdev, struct snd_soc_dai *cpu_dai,
 				 struct snd_pcm_substream *substream, int cmd)
 {
+	struct hdac_ext_stream *hext_stream = snd_soc_dai_get_dma_data(cpu_dai, substream);
 	struct sof_ipc4_fw_data *ipc4_data = sdev->private;
+	struct sof_intel_hda_stream *hda_stream;
 	struct snd_sof_widget *pipe_widget;
 	struct sof_ipc4_pipeline *pipeline;
 	struct snd_sof_widget *swidget;
@@ -413,13 +415,20 @@ static int hda_ipc4_post_trigger(struct snd_sof_dev *sdev, struct snd_soc_dai *c
 			goto out;
 		pipeline->state = SOF_IPC4_PIPE_RUNNING;
 		break;
-	case SNDRV_PCM_TRIGGER_SUSPEND:
 	case SNDRV_PCM_TRIGGER_STOP:
+		;
+		hext_stream = snd_soc_dai_get_dma_data(cpu_dai, substream);
+		hda_stream = hstream_to_sof_hda_stream(hext_stream);
+		hda_stream->pending_stop = true;
+		fallthrough;
+	case SNDRV_PCM_TRIGGER_SUSPEND:
 		/*
 		 * STOP/SUSPEND trigger is invoked only once when all users of this pipeline have
 		 * been stopped. So, clear the started_count so that the pipeline can be reset
 		 */
 		swidget->spipe->started_count = 0;
+		hda_stream = hstream_to_sof_hda_stream(hext_stream);
+		hda_stream->dma_cleanup_during_stop = true;
 		break;
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 		break;

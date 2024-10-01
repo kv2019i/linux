@@ -136,6 +136,7 @@ int hda_link_dma_cleanup(struct snd_pcm_substream *substream, struct hdac_ext_st
 	/* free the host DMA channel reserved by hostless streams */
 	hda_stream = hstream_to_sof_hda_stream(hext_stream);
 	hda_stream->host_reserved = 0;
+	hda_stream->pending_stop = false;
 
 	return 0;
 }
@@ -232,8 +233,15 @@ static int __maybe_unused hda_dai_hw_params_data(struct snd_pcm_substream *subst
 	}
 
 	hext_stream = ops->get_hext_stream(sdev, dai, substream);
-	if (hext_stream && hext_stream->link_prepared)
-		return 0;
+	if (hext_stream && hext_stream->link_prepared) {
+		struct sof_intel_hda_stream *hda_stream;
+		hda_stream = hstream_to_sof_hda_stream(hext_stream);
+
+		if (!hda_stream->pending_stop)
+			return 0;
+
+		hda_dai_hw_free(substream, dai);
+	}
 
 	ret = hda_link_dma_hw_params(substream, params, dai);
 	if (ret < 0)
@@ -265,6 +273,7 @@ static int __maybe_unused hda_dai_trigger(struct snd_pcm_substream *substream, i
 					  struct snd_soc_dai *dai)
 {
 	const struct hda_dai_widget_dma_ops *ops = hda_dai_get_ops(substream, dai);
+	struct sof_intel_hda_stream *hda_stream;
 	struct hdac_ext_stream *hext_stream;
 	struct snd_sof_dev *sdev;
 	int ret;
@@ -302,6 +311,15 @@ static int __maybe_unused hda_dai_trigger(struct snd_pcm_substream *substream, i
 	}
 
 	switch (cmd) {
+	case SNDRV_PCM_TRIGGER_STOP:
+		hda_stream = hstream_to_sof_hda_stream(hext_stream);
+
+		/* clean up the DMA for playback if the dma_cleanup_during_stop is set */
+		if (hext_stream->hstream.direction == SNDRV_PCM_STREAM_CAPTURE ||
+		    !hda_stream->dma_cleanup_during_stop)
+			break;
+		hda_stream->dma_cleanup_during_stop = false;
+		fallthrough;
 	case SNDRV_PCM_TRIGGER_SUSPEND:
 		ret = hda_link_dma_cleanup(substream, hext_stream, dai);
 		if (ret < 0) {

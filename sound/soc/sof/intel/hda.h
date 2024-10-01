@@ -562,7 +562,9 @@ struct sof_intel_hda_stream {
 	struct sof_intel_stream sof_intel_stream;
 	int host_reserved; /* reserve host DMA channel */
 	u32 flags;
+	bool pending_stop;
 	struct completion ioc;
+	bool dma_cleanup_during_stop;
 };
 
 #define hstream_to_sof_hda_stream(hstream) \
