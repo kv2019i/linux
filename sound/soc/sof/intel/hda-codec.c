@@ -99,6 +99,8 @@ void hda_codec_jack_wake_enable(struct snd_sof_dev *sdev, bool enable)
 		}
 	}
 
+	dev_info(bus->dev, "jack wake enable %d mask %x val %u\n", enable, mask, val);
+
 	snd_hdac_chip_updatew(bus, WAKEEN, mask & STATESTS_INT_MASK, val);
 }
 EXPORT_SYMBOL_NS_GPL(hda_codec_jack_wake_enable, "SND_SOC_SOF_HDA_AUDIO_CODEC");
